@@ -27,7 +27,6 @@ For node classification (test accuracy%):
 | MLP  | 73.71 ± 0.10 | 
 | RevGAT  | 78.34 ± 0.06 (new SOTA, 01/08/2024) |  
 
-
 | GNN | ogbn-products | 
 |----|----|
 | MLP  | 84.20 ± 0.22|
@@ -138,8 +137,8 @@ python -m src.classifier.link_prediction.gnn_link_pred \
 
 For reproducing the SOTA accuracy on arxiv, run the command for ensembling:
 ```bash
-bash scripts/revgat/ensemble.sh
+bash scripts/classifier/revgat/ensemble.sh
 ```
-To run code for other settings, nevigate to `scripts` directory.
+To run code for other settings, please nevigate to `scripts` directory.
 
 

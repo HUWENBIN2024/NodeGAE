@@ -1,6 +1,6 @@
-bash scripts/revgat_node_gae.sh
-bash scripts/revgat_simteg.sh
-bash scripts/revgat_gpt_pred.sh
+bash scripts/classifier/revgat/revgat_node_gae.sh
+bash scripts/classifier/revgat/revgat_simteg.sh
+bash scripts/classifier/revgat/revgat_gpt_pred.sh
 
 logits0=.cache_revgat/node_gae/cached_embs
 logits1=.cache_revgat/simteg/cached_embs
