@@ -49,6 +49,15 @@ pip install transformer
 pip install ogb
 ```
 
+### Path
+NodeGAE   
+├── datasets  
+├── emb  
+├── logs  
+├── misc  
+├── scripts  
+└── README.md  
+
 ### Data Preparation
 For ogbn-arxiv dataset:
 ```bash
