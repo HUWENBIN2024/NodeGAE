@@ -64,11 +64,15 @@ For ogbn-arxiv dataset:
 python src/dataset/arxiv_data.py
 wget -O datasets/ogbn_arxiv/titleabs.tsv.gz https://snap.stanford.edu/ogb/data/misc/ogbn_arxiv/titleabs.tsv.gz
 ```
+For ogbn-products dataset:
+```bash
+bash src/dataset/products/products_data.sh
+```
 
 ### Run the code
 *Step 1*: Train an autoencoder.  
 (Note: train autoencoders for node classification and link prediction seperately.)  
-For node classification:  
+For node classification:
 ```bash
 cd src/feature_extractor/autoencoder/vec2text
 

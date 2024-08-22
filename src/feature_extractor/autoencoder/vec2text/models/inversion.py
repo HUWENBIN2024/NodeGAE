@@ -11,6 +11,7 @@ import transformers
 from sentence_transformers import SentenceTransformer
 import torch.nn.functional as F
 
+import pickle
 from vec2text.models.config import InversionConfig
 from vec2text.models.model_utils import (
     FREEZE_STRATEGIES,
@@ -28,9 +29,12 @@ import gzip
 import random
 import numpy as np
 
+from simteg.src.dataset import load_dataset
+from tqdm import tqdm
 # import gnn
 from ogb.nodeproppred import PygNodePropPredDataset, Evaluator
 import torch_geometric.transforms as T
+from torch_geometric.utils import to_undirected
 from transformers import T5ForConditionalGeneration, T5Tokenizer
 from torch import Tensor
 from transformers import AutoTokenizer, AutoModel
@@ -75,16 +79,6 @@ def average_pool(last_hidden_states: Tensor,
                  attention_mask: Tensor) -> Tensor:
     last_hidden = last_hidden_states.masked_fill(~attention_mask[..., None].bool(), 0.0)
     return last_hidden.sum(dim=1) / attention_mask.sum(dim=1)[..., None]
-data_path = '../../../../datasets/ogbn_arxiv'
-print('loading the graph meta data...')
-df_node2paper = pd.read_csv(os.path.join(data_path, 'mapping/nodeidx2paperid.csv.gz'), compression='gzip')
-file_path = os.path.join(data_path, 'titleabs.tsv.gz')
-df_paperid2titleabs = pd.read_csv(gzip.open(file_path, 'rt'), delimiter='\t', names=['paperid', 'title', 'abstract'])
-df_paperid2titleabs = df_paperid2titleabs.drop(0)
-df_paperid2titleabs = df_paperid2titleabs.drop(179719)
-def fn(x):
-    return int(x['paperid'])
-df_paperid2titleabs['paperid_int'] = df_paperid2titleabs.apply(fn, axis=1)
 
 
     
@@ -121,43 +115,111 @@ class InversionModel(transformers.PreTrainedModel):
 
         # config.is_link_prediction = False
         # config.non_blocking = None
-        if not config.is_link_prediction:
-            print('doing node classification')
-            dataset=PygNodePropPredDataset(name='ogbn-arxiv', transform=T.Compose([T.ToUndirected(), T.ToSparseTensor()]), root='../../../../datasets')
-            data = dataset[0]
-            print('building adjacency list...')
-            adj_list = {}
-            sparse_tensor = data.adj_t
-            for row in range(sparse_tensor.size(0)):
-                neighbors = []
-                start = sparse_tensor.crow_indices()[row]
-                end = sparse_tensor.crow_indices()[row + 1]
-                for idx in range(start, end):
-                    neighbors.append(sparse_tensor.col_indices()[idx].item())
-                adj_list[row] = neighbors
-        else:
-            print('doing link prediction')
-            dataset=PygNodePropPredDataset(name='ogbn-arxiv', transform=T.Compose([T.ToUndirected()]), root='../../../../datasets')
-            data = dataset[0]
-            if not os.path.exists(os.path.join(data_path, 'split/link_pred')):
-                os.makedirs(os.path.join(data_path, 'split/link_pred'))
-                tfs = RandomLinkSplit(is_undirected=True, 
-                        add_negative_train_samples=True,
-                          neg_sampling_ratio=1.0,
-                        key = "edge_label", # supervision label
-                        disjoint_train_ratio=0,# disjoint mode if > 0
-                        # edge_types=None, # for heteroData
-                        # rev_edge_types=None, # for heteroData
-                        num_val = 0.2,
-                        num_test = 0.1,
-                        )
-                train_data, val_data, test_data = tfs(data)
-                torch.save(train_data, os.path.join(data_path, 'split/link_pred/train'))
-                torch.save(test_data, os.path.join(data_path, 'split/link_pred/test'))
-                torch.save(val_data, os.path.join(data_path, 'split/link_pred/val'))
+        if config.dataset_name == 'Egbertjing/products':
+            print('Experiment on products dataset!!!!!')
+            print('loading the graph meta data...')
+            dataset = load_dataset(name='ogbn-products', tokenizer='sentence-transformers/sentence-t5-base')
+            data = dataset._data
+            print('doing node prediction on product dataset')
+
+            adj_path = 'dataset/ogbn_products_text/processed/adj_list.pkl'
+            if not os.path.exists(adj_path):
+                print('building adjacency list...')
+                edge_index = to_undirected(data.edge_index)
+                # make neighbor list for each node
+                adj_list = {}
+                for i in tqdm(range(edge_index.size(1))):
+                    src = edge_index[0][i].item()
+                    dst = edge_index[1][i].item()
+                    if src not in adj_list:
+                        adj_list[src] = []
+                    if dst not in adj_list:
+                        adj_list[dst] = []
+                    adj_list[src].append(dst)
+                    adj_list[dst].append(src)
+                    
+                print('checking the lonely nodes...')
+                for i in tqdm(range(data.x.shape[0])):
+                    if i not in adj_list:
+                        adj_list[i] = [i]
+                with open(adj_path, 'wb') as f:
+                    pickle.dump(adj_list, f)
             else:
-                train_data = torch.load(os.path.join(data_path, 'split/link_pred/train'))
-        
+                print('loading adj_list from file...')
+                with open(adj_path, 'rb') as f:
+                    adj_list = pickle.load(f)
+
+            print('loading the node meta data...')
+            self.input_ids = data.input_ids
+            self.attention_mask = data.attention_mask
+                        
+            print('Loading the text data...')
+            df = pd.read_csv('dataset/ogbn_products_text/raw/Amazon-3M.raw/products.csv', sep=" ")
+            df.replace(np.nan, "", inplace=True)
+            df["titlecontent"] = df["title"] + ". " + df["content"]
+            df = df.drop(columns=["title", "content"])
+            df.rename(columns={"uid": "asin"}, inplace=True)
+
+            df_mapping = pd.read_csv("dataset/ogbn_products_text/mapping/nodeidx2asin.csv.gz")
+            df = df_mapping.merge(df, how="left", on="asin")
+            text_list = df["titlecontent"].values.tolist()
+            df = pd.DataFrame(text_list)
+            df.reset_index(inplace=True)
+            df = df.rename(columns={0:'text'})
+            self.df_id2text = df
+
+
+
+
+        else: 
+            data_path = '../../../../datasets/ogbn_arxiv'
+            print('loading the graph meta data...')
+            self.df_node2paper = pd.read_csv(os.path.join(data_path, 'mapping/nodeidx2paperid.csv.gz'), compression='gzip')
+            self.file_path = os.path.join(data_path, 'titleabs.tsv.gz')
+            self.df_paperid2titleabs = pd.read_csv(gzip.open(self.file_path, 'rt'), delimiter='\t', names=['paperid', 'title', 'abstract'])
+            self.df_paperid2titleabs = self.df_paperid2titleabs.drop(0)
+            self.df_paperid2titleabs = self.df_paperid2titleabs.drop(179719)
+            def fn(x):
+                return int(x['paperid'])
+            self.df_paperid2titleabs['paperid_int'] = self.df_paperid2titleabs.apply(fn, axis=1)
+
+            if not config.is_link_prediction:
+                print('doing node classification')
+                dataset=PygNodePropPredDataset(name='ogbn-arxiv', transform=T.Compose([T.ToUndirected(), T.ToSparseTensor()]), root='../../../../datasets')
+                data = dataset[0]
+                print('building adjacency list...')
+                adj_list = {}
+                sparse_tensor = data.adj_t
+                for row in range(sparse_tensor.size(0)):
+                    neighbors = []
+                    start = sparse_tensor.crow_indices()[row]
+                    end = sparse_tensor.crow_indices()[row + 1]
+                    for idx in range(start, end):
+                        neighbors.append(sparse_tensor.col_indices()[idx].item())
+                    adj_list[row] = neighbors
+            else:
+                print('doing link prediction')
+                dataset=PygNodePropPredDataset(name='ogbn-arxiv', transform=T.Compose([T.ToUndirected()]), root='../../../../datasets')
+                data = dataset[0]
+                if not os.path.exists(os.path.join(data_path, 'split/link_pred')):
+                    os.makedirs(os.path.join(data_path, 'split/link_pred'))
+                    tfs = RandomLinkSplit(is_undirected=True, 
+                            add_negative_train_samples=True,
+                            neg_sampling_ratio=1.0,
+                            key = "edge_label", # supervision label
+                            disjoint_train_ratio=0,# disjoint mode if > 0
+                            # edge_types=None, # for heteroData
+                            # rev_edge_types=None, # for heteroData
+                            num_val = 0.2,
+                            num_test = 0.1,
+                            )
+                    train_data, val_data, test_data = tfs(data)
+                    torch.save(train_data, os.path.join(data_path, 'split/link_pred/train'))
+                    torch.save(test_data, os.path.join(data_path, 'split/link_pred/test'))
+                    torch.save(val_data, os.path.join(data_path, 'split/link_pred/val'))
+                else:
+                    train_data = torch.load(os.path.join(data_path, 'split/link_pred/train'))
+            
         
             print('building adjacency list...')
             adj_list = {}
@@ -466,19 +528,30 @@ class InversionModel(transformers.PreTrainedModel):
 
         # self.positive_samples_1st_order =  sent_embs_nb_1st_order # (batch size, 768)
         # self.positive_samples_2st_order =  sent_embs_nb_2nd_order # (batch size, 768)
-
-        title_list = []
-        for idx_ in node_idx:
-            idx_int = idx_.item()
-            paperid = df_node2paper[df_node2paper['node idx'] == idx_int]['paper id'].values[0]
-            title = df_paperid2titleabs[df_paperid2titleabs['paperid_int'] == paperid]['title'].values[0]
-            abstract = df_paperid2titleabs[df_paperid2titleabs['paperid_int'] == paperid]['abstract'].values[0]
-            title_list.append('title: ' + title + '; abstract: ' + abstract)
-        input_ids_title_list = self.tokenizer_t5(title_list, padding=True, truncation=True, return_tensors="pt" ,max_length=encoder_input_token_max_len).to('cuda')
-        center_sent_embs_batch_last_hidden_state = self.embedder_encoder(input_ids=input_ids_title_list['input_ids'], attention_mask=input_ids_title_list['attention_mask']).last_hidden_state
-        center_sent_embs_batch = average_pool(center_sent_embs_batch_last_hidden_state, input_ids_title_list['attention_mask'])
+        if self.config.dataset_name == 'Egbertjing/products':
+            title_list = []
+            for idx_ in node_idx:
+                idx_int = idx_.item()
         
-        self.query = center_sent_embs_batch
+                title_list.append(self.df_id2text.iloc[idx_int]['text'])
+            input_ids_title_list = self.tokenizer_t5(title_list, padding=True, truncation=True, return_tensors="pt" ,max_length=encoder_input_token_max_len).to('cuda')
+            center_sent_embs_batch_last_hidden_state = self.embedder_encoder(input_ids=input_ids_title_list['input_ids'], attention_mask=input_ids_title_list['attention_mask']).last_hidden_state
+            center_sent_embs_batch = average_pool(center_sent_embs_batch_last_hidden_state, input_ids_title_list['attention_mask'])
+            
+            self.query = center_sent_embs_batch
+        else:
+            title_list = []
+            for idx_ in node_idx:
+                idx_int = idx_.item()
+                paperid = self.df_node2paper[self.df_node2paper['node idx'] == idx_int]['paper id'].values[0]
+                title = self.df_paperid2titleabs[self.df_paperid2titleabs['paperid_int'] == paperid]['title'].values[0]
+                abstract = self.df_paperid2titleabs[self.df_paperid2titleabs['paperid_int'] == paperid]['abstract'].values[0]
+                title_list.append('title: ' + title + '; abstract: ' + abstract)
+            input_ids_title_list = self.tokenizer_t5(title_list, padding=True, truncation=True, return_tensors="pt" ,max_length=encoder_input_token_max_len).to('cuda')
+            center_sent_embs_batch_last_hidden_state = self.embedder_encoder(input_ids=input_ids_title_list['input_ids'], attention_mask=input_ids_title_list['attention_mask']).last_hidden_state
+            center_sent_embs_batch = average_pool(center_sent_embs_batch_last_hidden_state, input_ids_title_list['attention_mask'])
+            
+            self.query = center_sent_embs_batch
 
         inputs_embeds, attention_mask = self.embed_and_project(
             embedder_input_ids=inputs.get("embedder_input_ids"),
@@ -527,46 +600,92 @@ class InversionModel(transformers.PreTrainedModel):
         title_abs_list_1st_order = []
         title_abs_list_2nd_order = []
         second_order_nb_list = []
-        for idx_ in node_idx:
-            idx_int = idx_.item()
-            sampled_neighbours_ids = random.sample(self.adj_list[idx_int], min(num_sampled_neighbour, len(self.adj_list[idx_int])))
-            for nb_ids in sampled_neighbours_ids:
-                second_order_nb_list += self.adj_list[nb_ids]
-            neighbour_idx_1st_order = random.choice(self.adj_list[idx_int])
-            neighbour_idx_2nd_order = random.choice(second_order_nb_list)
-            paperid = df_node2paper[df_node2paper['node idx'] == neighbour_idx_1st_order]['paper id'].values[0]
-            title = df_paperid2titleabs[df_paperid2titleabs['paperid_int'] == paperid]['title'].values[0]
-            abstract = df_paperid2titleabs[df_paperid2titleabs['paperid_int'] == paperid]['abstract'].values[0]
-            title_abs_list_1st_order.append('title: ' + title + '; abstract: ' + abstract)
+        if self.config.dataset_name == 'Egbertjing/products':
+            for idx_ in node_idx:
+                # 1st neighbor sampling
+                idx_int = idx_.item()
+                try:
+                    sampled_neighbours_ids = random.sample(self.adj_list[idx_int], min(num_sampled_neighbour, len(self.adj_list[idx_int])))
+                except KeyError:
+                    sampled_neighbours_ids = [idx_int]
+                    
+                    
+                
+                for nb_ids in sampled_neighbours_ids:
+                    try:
+                        second_order_nb_list += self.adj_list[nb_ids]
+                    except KeyError:
+                        second_order_nb_list = [nb_ids]
+                neighbour_idx_1st_order = random.choice(sampled_neighbours_ids)
+                neighbour_idx_2nd_order = random.choice(second_order_nb_list)
+            
+                title_abs_list_1st_order.append(self.df_id2text.iloc[neighbour_idx_1st_order]['text'])
+    
+                title_abs_list_2nd_order.append(self.df_id2text.iloc[neighbour_idx_2nd_order]['text'])
 
-            paperid = df_node2paper[df_node2paper['node idx'] == neighbour_idx_2nd_order]['paper id'].values[0]
-            title = df_paperid2titleabs[df_paperid2titleabs['paperid_int'] == paperid]['title'].values[0]
-            abstract = df_paperid2titleabs[df_paperid2titleabs['paperid_int'] == paperid]['abstract'].values[0]
-            title_abs_list_2nd_order.append('title: ' + title + '; abstract: ' + abstract)
+            input_ids_title_list_nb = self.tokenizer_t5(title_abs_list_1st_order, padding=True, truncation=True, return_tensors="pt" ,max_length=encoder_input_token_max_len).to('cuda')
+            sent_embs_last_state_nb_1st_order = self.embedder_encoder(input_ids=input_ids_title_list_nb['input_ids'], attention_mask=input_ids_title_list_nb['attention_mask']).last_hidden_state # (#neighbour, 768)
+            sent_embs_nb_1st_order = average_pool(sent_embs_last_state_nb_1st_order, input_ids_title_list_nb['attention_mask'])
 
-        input_ids_title_list_nb = self.tokenizer_t5(title_abs_list_1st_order, padding=True, truncation=True, return_tensors="pt" ,max_length=encoder_input_token_max_len).to('cuda')
-        sent_embs_last_state_nb_1st_order = self.embedder_encoder(input_ids=input_ids_title_list_nb['input_ids'], attention_mask=input_ids_title_list_nb['attention_mask']).last_hidden_state # (#neighbour, 768)
-        sent_embs_nb_1st_order = average_pool(sent_embs_last_state_nb_1st_order, input_ids_title_list_nb['attention_mask'])
+            input_ids_title_list_nb = self.tokenizer_t5(title_abs_list_2nd_order, padding=True, truncation=True, return_tensors="pt" ,max_length=encoder_input_token_max_len).to('cuda')
+            sent_embs_last_state_nb_2nd_order = self.embedder_encoder(input_ids=input_ids_title_list_nb['input_ids'], attention_mask=input_ids_title_list_nb['attention_mask']).last_hidden_state # (#neighbour, 768)
+            sent_embs_nb_2nd_order = average_pool(sent_embs_last_state_nb_2nd_order, input_ids_title_list_nb['attention_mask'])
 
-        input_ids_title_list_nb = self.tokenizer_t5(title_abs_list_2nd_order, padding=True, truncation=True, return_tensors="pt" ,max_length=encoder_input_token_max_len).to('cuda')
-        sent_embs_last_state_nb_2nd_order = self.embedder_encoder(input_ids=input_ids_title_list_nb['input_ids'], attention_mask=input_ids_title_list_nb['attention_mask']).last_hidden_state # (#neighbour, 768)
-        sent_embs_nb_2nd_order = average_pool(sent_embs_last_state_nb_2nd_order, input_ids_title_list_nb['attention_mask'])
+            self.positive_samples_1st_order =  sent_embs_nb_1st_order # (batch size, 768)
+            self.positive_samples_2st_order =  sent_embs_nb_2nd_order # (batch size, 768)
 
-        self.positive_samples_1st_order =  sent_embs_nb_1st_order # (batch size, 768)
-        self.positive_samples_2st_order =  sent_embs_nb_2nd_order # (batch size, 768)
+            title_list = []
+            for idx_ in node_idx:
+                idx_int = idx_.item()
+                
+                title_list.append(self.df_id2text.iloc[idx_int]['text'])
+            input_ids_title_list = self.tokenizer_t5(title_list, padding=True, truncation=True, return_tensors="pt" ,max_length=encoder_input_token_max_len).to('cuda')
+            center_sent_embs_batch_last_hidden_state = self.embedder_encoder(input_ids=input_ids_title_list['input_ids'], attention_mask=input_ids_title_list['attention_mask']).last_hidden_state
+            center_sent_embs_batch = average_pool(center_sent_embs_batch_last_hidden_state, input_ids_title_list['attention_mask'])
+            
+            self.query = center_sent_embs_batch
 
-        title_list = []
-        for idx_ in node_idx:
-            idx_int = idx_.item()
-            paperid = df_node2paper[df_node2paper['node idx'] == idx_int]['paper id'].values[0]
-            title = df_paperid2titleabs[df_paperid2titleabs['paperid_int'] == paperid]['title'].values[0]
-            abstract = df_paperid2titleabs[df_paperid2titleabs['paperid_int'] == paperid]['abstract'].values[0]
-            title_list.append('title: ' + title + '; abstract: ' + abstract)
-        input_ids_title_list = self.tokenizer_t5(title_list, padding=True, truncation=True, return_tensors="pt" ,max_length=encoder_input_token_max_len).to('cuda')
-        center_sent_embs_batch_last_hidden_state = self.embedder_encoder(input_ids=input_ids_title_list['input_ids'], attention_mask=input_ids_title_list['attention_mask']).last_hidden_state
-        center_sent_embs_batch = average_pool(center_sent_embs_batch_last_hidden_state, input_ids_title_list['attention_mask'])
-        
-        self.query = center_sent_embs_batch
+        else:  
+            for idx_ in node_idx:
+                idx_int = idx_.item()
+                sampled_neighbours_ids = random.sample(self.adj_list[idx_int], min(num_sampled_neighbour, len(self.adj_list[idx_int])))
+                for nb_ids in sampled_neighbours_ids:
+                    second_order_nb_list += self.adj_list[nb_ids]
+                neighbour_idx_1st_order = random.choice(self.adj_list[idx_int])
+                neighbour_idx_2nd_order = random.choice(second_order_nb_list)
+                paperid = self.df_node2paper[self.df_node2paper['node idx'] == neighbour_idx_1st_order]['paper id'].values[0]
+                title =self.df_paperid2titleabs[self.df_paperid2titleabs['paperid_int'] == paperid]['title'].values[0]
+                abstract =self.df_paperid2titleabs[self.df_paperid2titleabs['paperid_int'] == paperid]['abstract'].values[0]
+                title_abs_list_1st_order.append('title: ' + title + '; abstract: ' + abstract)
+
+                paperid = self.df_node2paper[self.df_node2paper['node idx'] == neighbour_idx_2nd_order]['paper id'].values[0]
+                title = self.df_paperid2titleabs[self.df_paperid2titleabs['paperid_int'] == paperid]['title'].values[0]
+                abstract = self.df_paperid2titleabs[self.df_paperid2titleabs['paperid_int'] == paperid]['abstract'].values[0]
+                title_abs_list_2nd_order.append('title: ' + title + '; abstract: ' + abstract)
+
+            input_ids_title_list_nb = self.tokenizer_t5(title_abs_list_1st_order, padding=True, truncation=True, return_tensors="pt" ,max_length=encoder_input_token_max_len).to('cuda')
+            sent_embs_last_state_nb_1st_order = self.embedder_encoder(input_ids=input_ids_title_list_nb['input_ids'], attention_mask=input_ids_title_list_nb['attention_mask']).last_hidden_state # (#neighbour, 768)
+            sent_embs_nb_1st_order = average_pool(sent_embs_last_state_nb_1st_order, input_ids_title_list_nb['attention_mask'])
+
+            input_ids_title_list_nb = self.tokenizer_t5(title_abs_list_2nd_order, padding=True, truncation=True, return_tensors="pt" ,max_length=encoder_input_token_max_len).to('cuda')
+            sent_embs_last_state_nb_2nd_order = self.embedder_encoder(input_ids=input_ids_title_list_nb['input_ids'], attention_mask=input_ids_title_list_nb['attention_mask']).last_hidden_state # (#neighbour, 768)
+            sent_embs_nb_2nd_order = average_pool(sent_embs_last_state_nb_2nd_order, input_ids_title_list_nb['attention_mask'])
+
+            self.positive_samples_1st_order =  sent_embs_nb_1st_order # (batch size, 768)
+            self.positive_samples_2st_order =  sent_embs_nb_2nd_order # (batch size, 768)
+
+            title_list = []
+            for idx_ in node_idx:
+                idx_int = idx_.item()
+                paperid = self.df_node2paper[self.df_node2paper['node idx'] == idx_int]['paper id'].values[0]
+                title = self.df_paperid2titleabs[self.df_paperid2titleabs['paperid_int'] == paperid]['title'].values[0]
+                abstract = self.df_paperid2titleabs[self.df_paperid2titleabs['paperid_int'] == paperid]['abstract'].values[0]
+                title_list.append('title: ' + title + '; abstract: ' + abstract)
+            input_ids_title_list = self.tokenizer_t5(title_list, padding=True, truncation=True, return_tensors="pt" ,max_length=encoder_input_token_max_len).to('cuda')
+            center_sent_embs_batch_last_hidden_state = self.embedder_encoder(input_ids=input_ids_title_list['input_ids'], attention_mask=input_ids_title_list['attention_mask']).last_hidden_state
+            center_sent_embs_batch = average_pool(center_sent_embs_batch_last_hidden_state, input_ids_title_list['attention_mask'])
+            
+            self.query = center_sent_embs_batch
         
         # Unused: input_ids, attention_mask
         inputs_embeds, attention_mask = self.embed_and_project(

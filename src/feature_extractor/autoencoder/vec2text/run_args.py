@@ -30,7 +30,8 @@ DATASET_NAMES = [
     "hubin/arxiv_title_abstract_all_for_train",
     "Egbertjing/citation2_subgraph_text",
     "hubin/tape_gpt_pred_explain",
-    "hubin/arxiv_title_abs_with_gpt_pred"
+    "hubin/arxiv_title_abs_with_gpt_pred",
+    "Egbertjing/products"
 ]
 
 

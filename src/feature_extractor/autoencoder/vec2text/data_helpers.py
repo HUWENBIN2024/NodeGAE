@@ -133,9 +133,8 @@ def dataset_from_args(data_args: DataArguments) -> datasets.DatasetDict:
     elif data_args.dataset_name == 'hubin/arxiv_title_abstract_all_for_train':
         raw_datasets = datasets.load_dataset("hubin/arxiv_title_abstract_all_for_train")
         raw_datasets["validation"] = raw_datasets["train"]
-    elif data_args.dataset_name == 'Egbertjing/citation2_subgraph_text':
-        raw_datasets = datasets.load_dataset("Egbertjing/citation2_subgraph_text")
-        raw_datasets['test'] = raw_datasets["train"].train_test_split(test_size=0.1, shuffle=True, seed=42)['test']
+    elif data_args.dataset_name == 'Egbertjing/products':
+        raw_datasets = datasets.load_dataset("Egbertjing/products")
         raw_datasets["validation"] = raw_datasets["train"]
     elif data_args.dataset_name == 'hubin/tape_gpt_pred_explain':
         raw_datasets = datasets.load_dataset("hubin/tape_gpt_pred_explain")

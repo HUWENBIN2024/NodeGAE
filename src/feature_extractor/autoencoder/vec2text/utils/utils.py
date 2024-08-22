@@ -118,7 +118,7 @@ def dataset_map_multi_worker(
     except (RuntimeError, ValueError):
         # kwargs["num_proc"] = kwargs.get("num_proc", len(os.sched_getaffinity(0)))
         kwargs["num_proc"] = kwargs.get("num_proc", 1)
-        return dataset.map(map_fn, *args, **kwargs, cache_file_name='/data/whuak/.cache/inversion/.cache')
+        return dataset.map(map_fn, *args, **kwargs, cache_file_name='~/.cache/inversion/.cache')
     datasets.disable_caching()
 
     cache_path = os.environ.get(
@@ -135,7 +135,7 @@ def dataset_map_multi_worker(
         contiguous=True,
         # keep_in_memory=True,
     )
-    ds_shard = ds_shard.map(map_fn, *args, **kwargs, cache_file_name='/localdata/whuak/.cache/inversion/.cache')
+    ds_shard = ds_shard.map(map_fn, *args, **kwargs, cache_file_name='~/.cache/inversion/.cache')
     ds_shard.save_to_disk(ds_shard_filepaths[rank])
     print("rank", rank, "saving:", ds_shard_filepaths[rank])
     torch.distributed.barrier()
