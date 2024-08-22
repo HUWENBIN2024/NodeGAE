@@ -69,7 +69,7 @@ For ogbn-products dataset:
 bash src/dataset/products/products_data.sh
 ```
 
-### Run the code
+### Run the code (ogbn-arxiv)
 *Step 1*: Train an autoencoder.  
 (Note: train autoencoders for node classification and link prediction seperately.)  
 For node classification:
@@ -152,6 +152,71 @@ For reproducing the SOTA accuracy on arxiv, run the command for ensembling:
 ```bash
 bash scripts/classifier/revgat/ensemble.sh
 ```
+To run code for other settings, please nevigate to `scripts` directory.
+
+
+
+### Run the code (ogbn-products)
+(Note: train autoencoders for node classification only.)  
+*Step 1*: Train an autoencoder.    
+For node classification:
+```bash
+cd src/feature_extractor/autoencoder/vec2text
+
+python run.py --per_device_train_batch_size 16 \--per_device_eval_batch_size 16 --max_seq_length 256 \--model_name_or_path t5-base --dataset_name Egbertjing/products --embedder_model_name gtr_base \--num_repeat_tokens 16 --embedder_no_grad True --num_train_epochs 100 --max_eval_samples 500 \--eval_steps 2000 --warmup_steps 10000 --bf16=1 --use_wandb=0 --use_frozen_embeddings_as_input False \--experiment inversion --lr_scheduler_type constant_with_warmup --exp_group_name products-gtr \--learning_rate 0.0001 --output_dir ./saves/autoencoder --save_steps 5000 --overwrite_output_dir --use_infonce_loss --auto_encoder_name  sentence-transformers/sentence-t5-base --infonce_loss_weight  1.0
+```
+
+*Step 2*: Obtain the feature embeddings from trained frozen encoder.  
+```bash
+cd src/feature_extractor/autoencoder/vec2text
+
+python feature_extractor_products.py --model_path saves/autoencoder/checkpoint-$iteration --save_path ../../../../emb/nodegae_feature_emb.pt
+```
+<!-- 
+*Step 3*. Train a classifier with the output feature embeddings.  
+```bash
+# mlp
+python -m src.classifier.node_classification.mlp_node_cls \
+--emb_path  emb/nodegae_feature_emb.pt \
+--lr 0.01 \
+--hidden_size_gnn 256
+
+# sage
+python -m src.classifier.node_classification.gnn_node_cls \
+--emb_path  emb/nodegae_feature_emb.pt \
+--lr 0.01 \
+--hidden_size_gnn 256
+
+# revgat
+output_dir=.cache_revgat/autoencoder
+ckpt_dir=${output_dir}/ckpt
+mkdir -p ${output_dir}
+mkdir -p ${ckpt_dir}
+bert_x_dir=emb/nodegae_feature_emb.pt
+python -m src.gnn.node_classification.revgat.main \
+    --use-norm \
+    --no-attn-dst \
+    --mode teacher \
+    --gpu 0 \
+    --dropout 0.58 \
+    --edge-drop 0.46 \
+    --group 1 \
+    --input-drop 0.37 \
+    --label_smoothing_factor 0.02 \
+    --n-heads 2 \
+    --n-hidden 256 \
+    --n-label-iters 2 \
+    --n-layers 2 \
+    --use-labels \
+    --use_bert_x \
+    --bert_x_dir $bert_x_dir \
+    --ckpt_dir $ckpt_dir \
+    --output_dir $output_dir \
+    --save_pred \
+    --n-runs 10 \
+    --kd ${output_dir}/kd
+``` -->
+
 To run code for other settings, please nevigate to `scripts` directory.
 
 
