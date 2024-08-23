@@ -37,3 +37,8 @@ emb/
 .cache_autoencoder
 datasets/
 .cache*
+*.zip
+*.csv.gz
+src/feature_extractor/lm_finetune/dataset
+src/feature_extractor/lm_finetune/simteg
+src/feature_extractor/autoencoder/vec2text/dataset
