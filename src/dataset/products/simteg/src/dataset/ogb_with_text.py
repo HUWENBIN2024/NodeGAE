@@ -47,12 +47,6 @@ class OgbWithText(InMemoryDataset):
         if rank in [0, -1] and tokenize:
             self.save_metainfo()
         self.data, self.slices = torch.load(self.processed_paths[0])
-        # add input_ids and attention_mask
-        if self.should_tokenize:
-            if not osp.exists(self.tokenized_path) and rank <= 0:
-                _ = self.mapping_and_tokenizing()
-            dist.barrier()
-            self._data.input_ids, self._data.attention_mask = self.load_cached_tokens()
 
     @property
     def raw_file_names(self):
