@@ -37,8 +37,6 @@ class OgbWithText(InMemoryDataset):
         self.dir_name = "_".join(self.name.split("-"))
         self.original_root = root
         self.root = osp.join(root, self.dir_name)
-        print(root)
-        # self.original_root = root
         self.should_tokenize = tokenize
         self.tokenizer = T5Tokenizer.from_pretrained('sentence-transformers/sentence-t5-base')
         # self.tokenizer = T5Tokenizer.from_pretrained(tokenizer, use_fast=True) if tokenize else None

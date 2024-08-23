@@ -76,27 +76,22 @@ class OgbnProductsWithText(OgbWithText):
         file_names.append("node-feat")
         return [file_name + ".csv.gz" for file_name in file_names]
 
+
     def download(self):
-        
-        
         path = download_url(self.meta_info["graph_url"], self.original_root)
         extract_zip(path, self.original_root)
         # download text data Amazon-3M
-        output = osp.join(self.root, f"{self.meta_info['download_name']}/raw/Amazon-3M.raw.zip")
-
+        output = osp.join(self.original_root, f"{self.meta_info['download_name']}/raw/Amazon-3M.raw.zip")
         if osp.exists(output) and osp.getsize(output) > 0:  # pragma: no cover
             logger.info(f"Using exist file {output}")
         else:
             gdown.download(url=self.meta_info["text_url"], output=output, quiet=False, fuzzy=False)
-            extract_zip(output, osp.join(self.root, f"{self.meta_info['download_name']}/raw"))
+            extract_zip(output, osp.join(self.original_root, f"{self.meta_info['download_name']}/raw"))
             os.remove(output)
 
         os.unlink(path)
         shutil.rmtree(self.root)
-        shutil.move(osp.join(self.root, self.meta_info["download_name"]), self.root)
-        print(self.original_root)
-        print(osp.join(self.root, f"{self.meta_info['download_name']}/raw"))
-        return 
+        shutil.move(osp.join(self.original_root, self.meta_info["download_name"]), self.root)
 
     def process(self):
         data = read_graph_pyg(
