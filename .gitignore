@@ -36,5 +36,4 @@ emb/
 .cache_revgat
 .cache_autoencoder
 datasets/
-dataset/
 .cache*
