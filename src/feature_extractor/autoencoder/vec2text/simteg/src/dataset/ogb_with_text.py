@@ -32,20 +32,19 @@ class OgbWithText(InMemoryDataset):
         tokenizer='sentence-transformers/sentence-t5-base',
         tokenize=True,
     ):
+
         self.name = name  ## original name, e.g., ogbn-proteins
         self.meta_info = meta_info
         self.dir_name = "_".join(self.name.split("-"))
-        # self.original_root = root
-        self.root = osp.join(root, self.dir_name)
-        print(root)
         self.original_root = root
+        self.root = osp.join(root, self.dir_name)
         self.should_tokenize = tokenize
         self.tokenizer = T5Tokenizer.from_pretrained('sentence-transformers/sentence-t5-base')
         # self.tokenizer = T5Tokenizer.from_pretrained(tokenizer, use_fast=True) if tokenize else None
         # check if the dataset is already processed with the same tokenizer
         rank = int(os.getenv("RANK", -1))
-        with dist_barrier_context():
-            super(OgbWithText, self).__init__(self.root, transform, pre_transform)
+        # with dist_barrier_context():
+        #     super(OgbWithText, self).__init__(self.root, transform, pre_transform)
         if rank in [0, -1] and tokenize:
             self.save_metainfo()
         self.data, self.slices = torch.load(self.processed_paths[0])
@@ -53,7 +52,7 @@ class OgbWithText(InMemoryDataset):
         if self.should_tokenize:
             if not osp.exists(self.tokenized_path) and rank <= 0:
                 _ = self.mapping_and_tokenizing()
-            dist.barrier()
+            # dist.barrier()
             self._data.input_ids, self._data.attention_mask = self.load_cached_tokens()
 
     @property
