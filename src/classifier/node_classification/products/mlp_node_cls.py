@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 from ogb.nodeproppred import PygNodePropPredDataset, Evaluator
 
-from logger import Logger
+
 
 
 class MLP(torch.nn.Module):
@@ -95,10 +95,6 @@ def main():
         data.x = torch.load(args.emb_path, map_location='cpu')
 
     x = data.x
-    
-    if args.use_node_embedding:
-        embedding = torch.load('embedding.pt', map_location='cpu')
-        x = torch.cat([x, embedding], dim=-1)
     x = x.to(device)
 
     y_true = data.y.to(device)
@@ -108,7 +104,6 @@ def main():
                 args.dropout).to(device)
 
     evaluator = Evaluator(name='ogbn-products')
-    logger = Logger(args.runs, args)
 
     for run in range(args.runs):
         model.reset_parameters()
@@ -116,7 +111,7 @@ def main():
         for epoch in range(1, 1 + args.epochs):
             loss = train(model, x, y_true, train_idx, optimizer)
             result = test(model, x, y_true, split_idx, evaluator)
-            logger.add_result(run, result)
+
 
             if epoch % args.log_steps == 0:
                 train_acc, valid_acc, test_acc = result
@@ -126,9 +121,6 @@ def main():
                       f'Train: {100 * train_acc:.2f}%, '
                       f'Valid: {100 * valid_acc:.2f}%, '
                       f'Test: {100 * test_acc:.2f}%')
-
-        logger.print_statistics(run)
-    logger.print_statistics()
 
 
 if __name__ == "__main__":
