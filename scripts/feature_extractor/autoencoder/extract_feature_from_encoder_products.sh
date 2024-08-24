@@ -3,4 +3,4 @@ iteration=200000
 
 python feature_extractor_products.py \
 --model_path saves/autoencoder/checkpoint-$iteration \
---save_path ../../../../emb/nodegae_feature_emb.pt
+--save_path ../../../../emb/nodegae_feature_emb_products.pt

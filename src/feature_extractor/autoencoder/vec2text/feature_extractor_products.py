@@ -35,7 +35,7 @@ def main():
     parser = argparse.ArgumentParser(description='feature extractor')
     parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--model_path', type=str, default='saves/autoencoder/checkpoint-200000')
-    parser.add_argument('--save_path', type=str, default='../../../../emb/nodegae_feature_emb.pt')
+    parser.add_argument('--save_path', type=str, default='../../../../emb/nodegae_feature_emb_products.pt')
 
     args = parser.parse_args()
 
