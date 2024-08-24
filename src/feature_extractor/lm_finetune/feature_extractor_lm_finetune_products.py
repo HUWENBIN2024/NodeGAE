@@ -2,10 +2,9 @@ import torch.nn.functional as F
 
 from torch import Tensor
 from transformers import AutoTokenizer, AutoModel
-from datasets import load_dataset
+from simteg.src.dataset import load_dataset
 import numpy as np
 import torch
-import gnn
 from ogb.nodeproppred import PygNodePropPredDataset, Evaluator
 import torch_geometric.transforms as T
 from tqdm import tqdm
@@ -33,7 +32,7 @@ device = args.device
 
 print('Loading the dataset...')
 dataset_name = 'products'
-dataset = load_dataset(name='ogbn-products', tokenizer='sentence-transformers/sentence-t5-base')
+dataset = load_dataset(name='ogbn-products')
 data = dataset._data
 
 print('Loading the text data...')
