@@ -2,7 +2,7 @@ import torch.nn.functional as F
 
 from torch import Tensor
 from transformers import AutoTokenizer, AutoModel
-from datasets import load_dataset
+from simteg.src.dataset import load_dataset
 import numpy as np
 import torch
 from ogb.nodeproppred import PygNodePropPredDataset
@@ -21,7 +21,7 @@ import pandas as pd
 import os.path as osp
 
 
-parser = argparse.ArgumentParser(description='OGBN-Arxiv (GNN)')
+parser = argparse.ArgumentParser(description='OGBN-Products (GNN)')
 parser.add_argument('--device', type=int, default=0)
 parser.add_argument('--log_steps', type=int, default=1)
 # parser.add_argument('--use_sage', action='store_true')
@@ -119,18 +119,6 @@ class MyDataset(Dataset):
 
     def __getitem__(self, index):
         return self.data[index], self.label[index]
-
-graph_dataset=PygNodePropPredDataset(name='ogbn-arxiv', transform=T.Compose([T.ToUndirected(), T.ToSparseTensor()]), root='datasets')
-data = graph_dataset[0]
-data = data.to(device)
-
-split_idx = graph_dataset.get_idx_split() # train:test:valid = 90941/48603/29799
-train_split = split_idx['train'].to(device)
-test_split = split_idx['test'].to(device)
-
-
-y_train = data.y[train_split]  # Replace with your actual label array
-y_val = data.y[test_split]
 
 
 
