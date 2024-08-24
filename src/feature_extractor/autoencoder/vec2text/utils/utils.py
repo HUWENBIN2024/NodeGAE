@@ -118,7 +118,7 @@ def dataset_map_multi_worker(
     except (RuntimeError, ValueError):
         # kwargs["num_proc"] = kwargs.get("num_proc", len(os.sched_getaffinity(0)))
         kwargs["num_proc"] = kwargs.get("num_proc", 1)
-        return dataset.map(map_fn, *args, **kwargs, cache_file_name='localdata/hjingaa/.cache/inversion/.cache')
+        return dataset.map(map_fn, *args, **kwargs, cache_file_name='/localdata/hjingaa/.cache/inversion/.cache')
     datasets.disable_caching()
 
     cache_path = os.environ.get(
