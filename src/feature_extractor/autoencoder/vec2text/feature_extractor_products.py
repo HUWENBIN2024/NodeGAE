@@ -49,7 +49,7 @@ def main():
     data = dataset[0]
     data = data.to(device)
 
-    split_idx = dataset.get_idx_split() # train:test:valid = 90941/48603/29799
+    split_idx = dataset.get_idx_split() 
     train_split = split_idx['train'].to(device)
     test_split = split_idx['test'].to(device)
 
