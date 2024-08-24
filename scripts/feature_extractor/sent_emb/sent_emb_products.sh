@@ -1,6 +1,3 @@
-
-
-cd src/feature_extractor/sent_emb/
 folder_path="emb"
 
 # 检查文件夹是否存在
@@ -11,4 +8,5 @@ if [ ! -d "$folder_path" ]; then
 else
     echo "Folder already exists: $folder_path"
 fi
+cd src/feature_extractor/sent_emb/
 python sent_emb_products.py
