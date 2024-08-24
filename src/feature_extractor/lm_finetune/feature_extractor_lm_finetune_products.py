@@ -23,7 +23,7 @@ import os.path as osp
 parser = argparse.ArgumentParser(description='feature extractor')
 parser.add_argument('--device', type=str, default='cuda')
 parser.add_argument('--model_path', type=str, default='save_lm_finetune/t5base_mode_cls.pt')
-parser.add_argument('--save_path', type=str, default='emb/lm_finetune.pt')
+parser.add_argument('--save_path', type=str, default='../../../emb/lm_finetune_products.pt')
 
 args = parser.parse_args()
 
