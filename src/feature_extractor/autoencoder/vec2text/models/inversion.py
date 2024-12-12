@@ -29,7 +29,7 @@ import gzip
 import random
 import numpy as np
 
-from simteg.src.dataset import load_dataset
+# from simteg.src.dataset import load_dataset
 from tqdm import tqdm
 # import gnn
 from ogb.nodeproppred import PygNodePropPredDataset, Evaluator
@@ -221,14 +221,14 @@ class InversionModel(transformers.PreTrainedModel):
                     train_data = torch.load(os.path.join(data_path, 'split/link_pred/train'))
             
         
-            print('building adjacency list...')
-            adj_list = {}
-            for i in range(len(train_data.x)):
-                adj_list[i] = [i]
-            for i in range(train_data.edge_index.shape[1]):
-                src, tar = train_data.edge_index[:,i].tolist()
-                adj_list[src].append(tar)
-
+                print('building adjacency list...')
+                adj_list = {}
+                for i in range(len(train_data.x)):
+                    adj_list[i] = [i]
+                for i in range(train_data.edge_index.shape[1]):
+                    src, tar = train_data.edge_index[:,i].tolist()
+                    adj_list[src].append(tar)
+    
         self.adj_list = adj_list
 
         embedder_model_api = config.embedder_model_api
